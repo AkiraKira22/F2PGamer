@@ -13,31 +13,30 @@ class DetailScreen extends StatefulWidget {
 }
 
 class _DetailScreenState extends State<DetailScreen> {
-  bool _isFavorite = false;
+  // Created once. Building the future in initState (instead of inline in
+  // build) means the favorite-toggle rebuilds don't re-fire the network call.
+  late final Future<GameDetail> _detailFuture;
 
   @override
   void initState() {
     super.initState();
-    _isFavorite = FavoritesService.instance.isFavorite(widget.gameId);
+    _detailFuture = ApiService.fetchGameDetail(widget.gameId);
   }
 
   Future<void> _toggleFavorite() async {
     await FavoritesService.instance.toggle(widget.gameId);
-    setState(() {
-      _isFavorite = FavoritesService.instance.isFavorite(widget.gameId);
-    });
-
     if (!mounted) return;
+
+    final isFavorite = FavoritesService.instance.isFavorite(widget.gameId);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          _isFavorite
+          isFavorite
               ? 'Game added to favorites!'
               : 'Game removed from favorites',
         ),
-        backgroundColor: _isFavorite
-            ? AppTheme.successGreen
-            : AppTheme.accentCyan,
+        backgroundColor:
+            isFavorite ? AppTheme.successGreen : AppTheme.accentCyan,
         duration: const Duration(seconds: 2),
       ),
     );
@@ -47,28 +46,12 @@ class _DetailScreenState extends State<DetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.darkBg,
-      appBar: AppBar(
-        backgroundColor: AppTheme.appBarBg,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: AppTheme.accentCyan),
-        actions: [
-          IconButton(
-            icon: Icon(
-              _isFavorite ? Icons.favorite : Icons.favorite_border,
-              color: _isFavorite ? AppTheme.accentMagenta : AppTheme.accentCyan,
-              size: 28,
-            ),
-            onPressed: _toggleFavorite,
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
       body: FutureBuilder<GameDetail>(
-        future: ApiService.fetchGameDetail(widget.gameId),
+        future: _detailFuture,
         builder: (context, snapshot) {
           // Loading State
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(
+            return _statusScaffold(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: const [
@@ -88,7 +71,7 @@ class _DetailScreenState extends State<DetailScreen> {
 
           // Error State
           if (snapshot.hasError) {
-            return Center(
+            return _statusScaffold(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -124,200 +107,256 @@ class _DetailScreenState extends State<DetailScreen> {
 
           final detail = snapshot.data!;
 
-          return ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              // Hero image header (Requirement 09). A normal Image still
-              // animates between the grid and this screen.
-              Hero(
-                tag: 'game-thumb-${detail.id}',
-                child: Image.network(
-                  detail.thumbnail,
-                  height: 220,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      height: 220,
-                      color: AppTheme.cardBg,
-                      child: const Icon(
-                        Icons.image_not_supported,
-                        color: AppTheme.accentCyan,
-                        size: 48,
-                      ),
-                    );
-                  },
+          // CustomScrollView lets the Hero header collapse into the app bar as
+          // the user scrolls (a SliverAppBar with a FlexibleSpaceBar), while
+          // the rest of the page scrolls as normal slivers below it.
+          return CustomScrollView(
+            slivers: [
+              SliverAppBar(
+                expandedHeight: 280,
+                pinned: true,
+                backgroundColor: AppTheme.appBarBg,
+                iconTheme: const IconThemeData(color: AppTheme.accentCyan),
+                actions: [
+                  // The heart rebuilds itself when the favorite changes.
+                  ValueListenableBuilder<Set<int>>(
+                    valueListenable: FavoritesService.instance.favorites,
+                    builder: (context, favorites, _) {
+                      final isFavorite = favorites.contains(detail.id);
+                      return IconButton(
+                        icon: Icon(
+                          isFavorite
+                              ? Icons.favorite
+                              : Icons.favorite_border,
+                          color: isFavorite
+                              ? AppTheme.accentMagenta
+                              : AppTheme.accentCyan,
+                          size: 28,
+                        ),
+                        onPressed: _toggleFavorite,
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                flexibleSpace: FlexibleSpaceBar(
+                  // Hero image header (Requirement 09). A normal Image still
+                  // animates between the grid and this screen.
+                  background: Hero(
+                    tag: 'game-thumb-${detail.id}',
+                    child: Image.network(
+                      detail.thumbnail,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: AppTheme.cardBg,
+                          child: const Icon(
+                            Icons.image_not_supported,
+                            color: AppTheme.accentCyan,
+                            size: 48,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      detail.title,
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        detail.title,
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.person,
-                          color: AppTheme.accentCyan,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            'Developer: ${detail.developer}',
-                            style: const TextStyle(
-                              color: AppTheme.textSecondary,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.calendar_today,
-                          color: AppTheme.accentCyan,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Released: ${detail.releaseDate}',
-                          style: const TextStyle(color: AppTheme.textSecondary),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.info,
-                          color: AppTheme.accentCyan,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Status: ${detail.status}',
-                          style: const TextStyle(color: AppTheme.textSecondary),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    const Divider(color: AppTheme.accentCyan, height: 24),
-                    const Text(
-                      'About the Game',
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: AppTheme.accentCyan,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      detail.description,
-                      style: const TextStyle(
-                        color: AppTheme.textSecondary,
-                        height: 1.4,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    // Publisher Info
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppTheme.cardBg,
-                        border: Border.all(
-                          color: AppTheme.accentCyan,
-                          width: 0.5,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      const SizedBox(height: 8),
+                      Row(
                         children: [
-                          const Text(
-                            'Publisher',
-                            style: TextStyle(
-                              color: AppTheme.accentCyan,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
+                          const Icon(
+                            Icons.person,
+                            color: AppTheme.accentCyan,
+                            size: 16,
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            detail.publisher,
-                            style: const TextStyle(color: AppTheme.textPrimary),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              'Developer: ${detail.developer}',
+                              style: const TextStyle(
+                                color: AppTheme.textSecondary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    // Screenshots Section
-                    if (detail.screenshots.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.calendar_today,
+                            color: AppTheme.accentCyan,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Released: ${detail.releaseDate}',
+                            style:
+                                const TextStyle(color: AppTheme.textSecondary),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.info,
+                            color: AppTheme.accentCyan,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Status: ${detail.status}',
+                            style:
+                                const TextStyle(color: AppTheme.textSecondary),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      const Divider(color: AppTheme.accentCyan, height: 24),
                       const Text(
-                        'Screenshots',
+                        'About the Game',
                         style: TextStyle(
+                          fontSize: 18,
                           color: AppTheme.accentCyan,
                           fontWeight: FontWeight.bold,
-                          fontSize: 16,
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        height: 150,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: detail.screenshots.length,
-                          itemBuilder: (context, idx) {
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
-                              // Card with antiAlias rounds the image corners
-                              // without a ClipRRect.
-                              child: Card(
-                                clipBehavior: Clip.antiAlias,
-                                margin: EdgeInsets.zero,
-                                child: Image.network(
-                                  detail.screenshots[idx],
-                                  fit: BoxFit.cover,
-                                  width: 200,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Container(
-                                      width: 200,
-                                      color: AppTheme.cardBg,
-                                      child: const Icon(
-                                        Icons.image_not_supported,
-                                        color: AppTheme.accentCyan,
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            );
-                          },
+                      const SizedBox(height: 8),
+                      Text(
+                        detail.description,
+                        style: const TextStyle(
+                          color: AppTheme.textSecondary,
+                          height: 1.4,
+                          fontSize: 14,
                         ),
                       ),
                       const SizedBox(height: 20),
+                      // Publisher Info
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.cardBg,
+                          border: Border.all(
+                            color: AppTheme.accentCyan,
+                            width: 0.5,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Publisher',
+                              style: TextStyle(
+                                color: AppTheme.accentCyan,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              detail.publisher,
+                              style: const TextStyle(
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Screenshots Section
+                      if (detail.screenshots.isNotEmpty) ...[
+                        const Text(
+                          'Screenshots',
+                          style: TextStyle(
+                            color: AppTheme.accentCyan,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: 150,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: detail.screenshots.length,
+                            itemBuilder: (context, idx) {
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8.0),
+                                // Card with antiAlias rounds the image corners
+                                // without a ClipRRect.
+                                child: Card(
+                                  clipBehavior: Clip.antiAlias,
+                                  margin: EdgeInsets.zero,
+                                  child: Image.network(
+                                    detail.screenshots[idx],
+                                    fit: BoxFit.cover,
+                                    width: 200,
+                                    errorBuilder:
+                                        (context, error, stackTrace) {
+                                      return Container(
+                                        width: 200,
+                                        color: AppTheme.cardBg,
+                                        child: const Icon(
+                                          Icons.image_not_supported,
+                                          color: AppTheme.accentCyan,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+                      const SizedBox(height: 32),
                     ],
-                    const SizedBox(height: 32),
-                  ],
+                  ),
                 ),
               ),
             ],
           );
         },
       ),
+    );
+  }
+
+  /// Loading and error states still need a back button (there's no AppBar of
+  /// their own), so they reuse a minimal scrollable shell with a pinned
+  /// SliverAppBar that just carries the back arrow.
+  Widget _statusScaffold({required Widget child}) {
+    return CustomScrollView(
+      slivers: [
+        const SliverAppBar(
+          pinned: true,
+          backgroundColor: AppTheme.appBarBg,
+          elevation: 0,
+          iconTheme: IconThemeData(color: AppTheme.accentCyan),
+        ),
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: child),
+        ),
+      ],
     );
   }
 }

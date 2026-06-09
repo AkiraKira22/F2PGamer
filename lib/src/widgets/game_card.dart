@@ -6,49 +6,28 @@ import 'detail_screen.dart';
 
 /// A single game tile used by the grid and the favorites list. Tapping the
 /// card opens the [DetailScreen]; the heart overlay on the image toggles the
-/// favorite directly. [onReturn] (if given) fires after the detail screen is
-/// popped or the heart is toggled, so callers can refresh.
-class GameCard extends StatefulWidget {
+/// favorite directly.
+///
+/// The card is stateless: the heart listens to [FavoritesService.favorites]
+/// through a [ValueListenableBuilder], so it (and every other screen showing
+/// this game) updates itself whenever the favorite is toggled anywhere.
+class GameCard extends StatelessWidget {
   final Game game;
-  final VoidCallback? onReturn;
-  const GameCard({super.key, required this.game, this.onReturn});
+  const GameCard({super.key, required this.game});
 
-  @override
-  State<GameCard> createState() => _GameCardState();
-}
-
-class _GameCardState extends State<GameCard> {
-  Future<void> _toggleFavorite() async {
-    await FavoritesService.instance.toggle(widget.game.id);
-    if (!mounted) return;
-    // Rebuild so this card's heart reflects the new state. We read the value
-    // straight from the service in build(), so there's nothing to cache.
-    setState(() {});
-    widget.onReturn?.call();
-  }
-
-  Future<void> _openDetail() async {
-    await Navigator.push(
+  void _openDetail(BuildContext context) {
+    Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => DetailScreen(gameId: widget.game.id),
+        builder: (context) => DetailScreen(gameId: game.id),
       ),
     );
-    if (!mounted) return;
-    // The favorite may have been toggled on the detail screen.
-    setState(() {});
-    widget.onReturn?.call();
   }
 
   @override
   Widget build(BuildContext context) {
-    final game = widget.game;
-    // Read the live favorite state every build, so a card that gets recycled
-    // for a different game (e.g. after one is removed) always shows the right
-    // heart.
-    final isFavorite = FavoritesService.instance.isFavorite(game.id);
     return GestureDetector(
-      onTap: _openDetail,
+      onTap: () => _openDetail(context),
       child: Card(
         // antiAlias clips the child column to the rounded card shape, so the
         // image's top corners are rounded without a ClipRRect.
@@ -86,20 +65,29 @@ class _GameCardState extends State<GameCard> {
                   top: 6,
                   right: 6,
                   child: GestureDetector(
-                    onTap: _toggleFavorite,
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: const BoxDecoration(
-                        color: Colors.black54,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        isFavorite ? Icons.favorite : Icons.favorite_border,
-                        color: isFavorite
-                            ? AppTheme.accentMagenta
-                            : Colors.white,
-                        size: 20,
-                      ),
+                    onTap: () => FavoritesService.instance.toggle(game.id),
+                    // Only this heart rebuilds when favorites change.
+                    child: ValueListenableBuilder<Set<int>>(
+                      valueListenable: FavoritesService.instance.favorites,
+                      builder: (context, favorites, _) {
+                        final isFavorite = favorites.contains(game.id);
+                        return Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: const BoxDecoration(
+                            color: Colors.black54,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            isFavorite
+                                ? Icons.favorite
+                                : Icons.favorite_border,
+                            color: isFavorite
+                                ? AppTheme.accentMagenta
+                                : Colors.white,
+                            size: 20,
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),

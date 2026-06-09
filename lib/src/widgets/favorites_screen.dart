@@ -5,9 +5,9 @@ import '../services/favorites_service.dart';
 import '../theme.dart';
 import 'game_card.dart';
 
-/// Shows the games the user has marked as favorite. Returning from a game's
-/// detail screen (where a favorite may have been toggled) refreshes the list
-/// via setState.
+/// Shows the games the user has marked as favorite. The grid is wrapped in a
+/// [ValueListenableBuilder] on [FavoritesService.favorites], so un-favoriting a
+/// game anywhere removes it from this list immediately — no manual refresh.
 class FavoritesScreen extends StatefulWidget {
   const FavoritesScreen({super.key});
 
@@ -76,30 +76,32 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           }
 
           final allGames = snapshot.data ?? [];
-          final favorites = FavoritesService.instance.favorites;
-          final favoriteGames = allGames
-              .where((game) => favorites.contains(game.id))
-              .toList();
 
-          if (favoriteGames.isEmpty) {
-            return const _EmptyFavorites();
-          }
+          // Rebuild the grid whenever the favorite set changes, so removing a
+          // favorite (here or on the detail screen) drops it from the list.
+          return ValueListenableBuilder<Set<int>>(
+            valueListenable: FavoritesService.instance.favorites,
+            builder: (context, favorites, _) {
+              final favoriteGames = allGames
+                  .where((game) => favorites.contains(game.id))
+                  .toList();
 
-          return GridView.count(
-            padding: const EdgeInsets.all(12),
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 0.75,
-            children: favoriteGames
-                .map(
-                  (game) => GameCard(
-                    key: ValueKey(game.id),
-                    game: game,
-                    onReturn: () => setState(() {}),
-                  ),
-                )
-                .toList(),
+              if (favoriteGames.isEmpty) {
+                return const _EmptyFavorites();
+              }
+
+              return GridView.count(
+                padding: const EdgeInsets.all(12),
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 0.75,
+                children: favoriteGames
+                    .map((game) =>
+                        GameCard(key: ValueKey(game.id), game: game))
+                    .toList(),
+              );
+            },
           );
         },
       ),
