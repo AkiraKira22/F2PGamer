@@ -67,7 +67,7 @@ class _LoginScreenState extends State<LoginScreen> {
       // Success: the StreamBuilder rebuilds to the home screen; this widget
       // will be disposed, so we don't navigate or setState here.
     } on AuthException catch (e) {
-      if (!e.cancelled) _showErrorSnackBar('${e.message}');
+      if (!e.cancelled) _showErrorSnackBar(e.message);
     } catch (e) {
       _showErrorSnackBar('System Firewall: $e');
     } finally {
