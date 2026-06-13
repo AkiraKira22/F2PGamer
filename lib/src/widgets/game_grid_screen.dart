@@ -4,7 +4,7 @@ import '../data/models.dart';
 import '../services/auth_service.dart';
 import '../theme.dart';
 import 'game_card.dart';
-import 'favorites_screen.dart';
+import 'game_filter_bar.dart';
 
 class GameGridScreen extends StatefulWidget {
   const GameGridScreen({super.key});
@@ -17,7 +17,13 @@ class _GameGridScreenState extends State<GameGridScreen> {
   late Future<List<Game>> _gamesFuture;
   List<Game> _allGames = [];
   List<Game> _filteredGames = [];
+  List<String> _categories = [kAllCategories];
   final TextEditingController _searchController = TextEditingController();
+
+  // Active search query plus the sort/filter selections that drive the grid.
+  String _searchQuery = '';
+  GameSort _sort = GameSort.nameAsc;
+  String _category = kAllCategories;
 
   @override
   void initState() {
@@ -33,7 +39,8 @@ class _GameGridScreenState extends State<GameGridScreen> {
     final games = await ApiService.fetchGames();
     setState(() {
       _allGames = games;
-      _filteredGames = games;
+      _categories = categoriesFrom(games);
+      _applyFilters();
     });
     return games;
   }
@@ -46,18 +53,28 @@ class _GameGridScreenState extends State<GameGridScreen> {
 
   void _filterSearch(String query) {
     setState(() {
-      if (query.isEmpty) {
-        _filteredGames = _allGames;
-      } else {
-        _filteredGames = _allGames
-            .where(
-              (game) =>
-                  game.title.toLowerCase().contains(query.toLowerCase()) ||
-                  game.genre.toLowerCase().contains(query.toLowerCase()),
-            )
-            .toList();
-      }
+      _searchQuery = query;
+      _applyFilters();
     });
+  }
+
+  /// Recomputes [_filteredGames] from the current search text, category, and
+  /// sort. Search runs first, then [applyGameFilters] handles category + sort.
+  /// Call inside a [setState].
+  void _applyFilters() {
+    var games = _allGames;
+    if (_searchQuery.isNotEmpty) {
+      final query = _searchQuery.toLowerCase();
+      games = games
+          .where(
+            (game) =>
+                game.title.toLowerCase().contains(query) ||
+                game.genre.toLowerCase().contains(query),
+          )
+          .toList();
+    }
+    _filteredGames =
+        applyGameFilters(games, sort: _sort, category: _category);
   }
 
   @override
@@ -81,17 +98,6 @@ class _GameGridScreenState extends State<GameGridScreen> {
         backgroundColor: AppTheme.appBarBg,
         elevation: 0,
         actions: [
-          IconButton(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const FavoritesScreen(),
-                ),
-              );
-            },
-            icon: const Icon(Icons.favorite, color: AppTheme.accentCyan),
-            tooltip: 'Favorites',
-          ),
           IconButton(
             onPressed: logout,
             icon: const Icon(Icons.logout, color: AppTheme.errorRed),
@@ -117,6 +123,20 @@ class _GameGridScreenState extends State<GameGridScreen> {
                 const TextStyle(color: AppTheme.textSecondary),
               ),
             ),
+          ),
+          // Sort + category controls (shared with the favorites screen).
+          GameFilterBar(
+            sort: _sort,
+            category: _category,
+            categories: _categories,
+            onSortChanged: (value) => setState(() {
+              _sort = value;
+              _applyFilters();
+            }),
+            onCategoryChanged: (value) => setState(() {
+              _category = value;
+              _applyFilters();
+            }),
           ),
           Expanded(
             child: FutureBuilder<List<Game>>(

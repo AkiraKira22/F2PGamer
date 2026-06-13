@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'services/auth_service.dart';
 import 'theme.dart';
 import 'widgets/login_screen.dart';
-import 'widgets/game_grid_screen.dart';
+import 'widgets/home_shell.dart';
 
 class F2PGamerApp extends StatelessWidget {
   const F2PGamerApp({super.key});
@@ -23,7 +23,7 @@ class F2PGamerApp extends StatelessWidget {
             return const _SplashScreen();
           }
           if (snapshot.hasData) {
-            return const GameGridScreen(); //logged in
+            return const HomeShell(); //logged in
           }
           return const LoginScreen(); //logged out
         },

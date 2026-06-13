@@ -6,6 +6,7 @@ class Game {
   final String shortDescription;
   final String genre;
   final String platform;
+  final String releaseDate;
 
   Game({
     required this.id,
@@ -14,6 +15,7 @@ class Game {
     required this.shortDescription,
     required this.genre,
     required this.platform,
+    required this.releaseDate,
   });
 
   factory Game.fromJson(Map<String, dynamic> json) {
@@ -24,6 +26,7 @@ class Game {
       shortDescription: json['short_description'] ?? '',
       genre: json['genre'] ?? '',
       platform: json['platform'] ?? '',
+      releaseDate: json['release_date'] ?? '',
     );
   }
 }
